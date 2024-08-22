@@ -46,6 +46,7 @@ public class FrontChannelEmbedController : ControllerBase
     }
 
     [HttpOptions]
+    [AllowAnonymous]
     public IActionResult Options()
     {
         // Handle the preflight request

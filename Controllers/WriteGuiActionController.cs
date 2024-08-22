@@ -27,4 +27,12 @@ public class WriteGuiActionController : Controller
     {
         return Ok();
     }
+
+    [HttpOptions]
+    [AllowAnonymous]
+    public IActionResult Options()
+    {
+        // Handle the preflight request
+        return Ok();
+    }
 }
