@@ -5,8 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace Digdir.BDB.Dialogporten.ServiceProvider.Controllers;
 
 [ApiController]
-[Authorize(AuthenticationSchemes = "DialogToken")]
 [Route("guiaction/write/{xacmlaction?}")]
+[Authorize(AuthenticationSchemes = "DialogToken")]
 [EnableCors("AllowedOriginsPolicy")]
 public class WriteGuiActionController : Controller
 {

@@ -6,8 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace Digdir.BDB.Dialogporten.ServiceProvider.Controllers;
 
 [ApiController]
-[Authorize(AuthenticationSchemes = "DialogToken")]
 [Route("fce")]
+[Authorize(AuthenticationSchemes = "DialogToken")]
 [EnableCors("AllowedOriginsPolicy")]
 public class FrontChannelEmbedController : ControllerBase
 {
