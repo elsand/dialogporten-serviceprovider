@@ -15,10 +15,9 @@ public static class DialogTokenServiceCollectionExtension
                 {
                     ValidateAudience = false,
                     ValidateIssuer = false,
-                    // Because IssuerSigningKeyResolver does not have a async counterpart, we need
-                    // to proxy the keys via a static field. Also, ConfigurationManager does not
-                    // support EdDsa, so we need to roll our own refresh/cache of JWKS in the service
-                    // below.
+                    // ConfigurationManager does not support EdDsa, so we need to roll our own refresh/cache of JWKS
+                    // in the service below. Because IssuerSigningKeyResolver does not have an async counterpart, we
+                    // need to proxy the keys via a static field.
                     IssuerSigningKeyResolver = (_, _, _, _) => EdDsaSecurityKeysCacheService.EdDsaSecurityKeys
                 };
                 options.RequireHttpsMetadata = true;
@@ -33,11 +32,15 @@ public class EdDsaSecurityKeysCacheService : IHostedService, IDisposable
     public static List<EdDsaSecurityKey> EdDsaSecurityKeys => _keys;
     private static volatile List<EdDsaSecurityKey> _keys = new();
 
-    private Timer? _timer;
+    private PeriodicTimer? _timer;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<EdDsaSecurityKeysCacheService> _logger;
+
+    private readonly TimeSpan _refreshInterval = TimeSpan.FromHours(12);
 
     // In this service we allow keys for all non-production environments for
-    // simplicity. Usually one would only allow a single environment (issuer) here
+    // simplicity. Usually one would only allow a single environment (issuer) here,
+    // which we could get from an injected IConfiguration/IOptions
     private readonly List<string> _wellKnownEndpoints =
     [
         "https://localhost:7214/api/v1/.well-known/jwks.json",
@@ -45,20 +48,36 @@ public class EdDsaSecurityKeysCacheService : IHostedService, IDisposable
         "https://platform.tt02.altinn.no/dialogporten/api/v1/.well-known/jwks.json"
     ];
 
-    public EdDsaSecurityKeysCacheService(IHttpClientFactory httpClientFactory)
+    public EdDsaSecurityKeysCacheService(IHttpClientFactory httpClientFactory, ILogger<EdDsaSecurityKeysCacheService> logger)
     {
         _httpClientFactory = httpClientFactory;
+        _logger = logger;
     }
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        _timer = new Timer(UpdateCache, null, TimeSpan.Zero, TimeSpan.FromHours(12));
-        return Task.CompletedTask;
+        _ = Task.Run(async () =>
+        {
+            _timer = new PeriodicTimer(_refreshInterval);
+            while (await _timer.WaitForNextTickAsync(cancellationToken))
+            {
+                try
+                {
+                    await RefreshAsync(cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "An error occurred while refreshing the EdDsa keys.");
+                }
+            }
+        }, cancellationToken);
+
+        await RefreshAsync(cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        _timer?.Change(Timeout.Infinite, 0);
+        _timer?.Dispose();
         return Task.CompletedTask;
     }
 
@@ -67,12 +86,7 @@ public class EdDsaSecurityKeysCacheService : IHostedService, IDisposable
         _timer?.Dispose();
     }
 
-    private void UpdateCache(object? state)
-    {
-        RefreshAsync().Wait();
-    }
-
-    private async Task RefreshAsync()
+    private async Task RefreshAsync(CancellationToken cancellationToken)
     {
         var httpClient = _httpClientFactory.CreateClient();
         var keys = new List<EdDsaSecurityKey>();
@@ -81,7 +95,7 @@ public class EdDsaSecurityKeysCacheService : IHostedService, IDisposable
         {
             try
             {
-                var response = await httpClient.GetStringAsync(endpoint);
+                var response = await httpClient.GetStringAsync(endpoint, cancellationToken);
                 var jwks = new JsonWebKeySet(response);
                 foreach (var jwk in jwks.Keys)
                 {
@@ -91,11 +105,13 @@ public class EdDsaSecurityKeysCacheService : IHostedService, IDisposable
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // ignored
+                _logger.LogWarning(ex, "Failed to retrieve keys from {endpoint}", endpoint);
             }
         }
+
+        _logger.LogInformation("Refreshed EdDsa keys cache with {count} keys", keys.Count);
 
         var newKeys = keys.ToList();
         _keys = newKeys; // Atomic replace
