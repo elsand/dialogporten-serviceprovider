@@ -16,12 +16,12 @@ builder.Services
     {
         options.AddPolicy("AllowedOriginsPolicy", builder =>
         {
-            builder.WithOrigins("https://localhost", "https://af.at.altinn.cloud", "https://af.tt.altinn.cloud")
+            // This is to ease development (ie. various locahost ports)
+            // In a production setting, this should be restricted to https://af.altinn.no
+            builder.AllowAnyOrigin()
                 .AllowAnyHeader()
                 .AllowAnyMethod()
-                .AllowCredentials()
                 .SetPreflightMaxAge(TimeSpan.FromMinutes(10));
-
         });
     });
 

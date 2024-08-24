@@ -44,12 +44,4 @@ public class FrontChannelEmbedController : ControllerBase
             {sb}
             """, "text/markdown");
     }
-
-    [HttpOptions]
-    [AllowAnonymous]
-    public IActionResult Options()
-    {
-        // Handle the preflight request
-        return Ok();
-    }
 }
