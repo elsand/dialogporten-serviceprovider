@@ -1,4 +1,9 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Digdir.BDB.Dialogporten.ServiceProvider.Auth;
+using Digdir.BDB.Dialogporten.ServiceProvider.Clients;
+using Digdir.BDB.Dialogporten.ServiceProvider.Services;
+using Refit;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddUserSecrets<Program>();
@@ -8,10 +13,14 @@ builder.Services.AddControllers();
 builder.Services
     .AddEndpointsApiExplorer()
     .AddSwaggerGen()
-    .AddHttpClient()
     .AddIdportenAuthentication(builder.Configuration)
     .AddDialogTokenAuthentication()
+    .AddTransient<TokenGeneratorMessageHandler>()
+    .AddTransient<ConsoleLoggingMessageHandler>()
+    .AddSingleton<ITokenGenerator, TokenGenerator>()
+    .AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>()
     .AddHostedService<EdDsaSecurityKeysCacheService>()
+    .AddHostedService<QueuedHostedService>()
     .AddCors(options =>
     {
         options.AddPolicy("AllowedOriginsPolicy", builder =>
@@ -23,7 +32,20 @@ builder.Services
                 .AllowAnyMethod()
                 .SetPreflightMaxAge(TimeSpan.FromMinutes(10));
         });
-    });
+    })
+    .AddRefitClient<IDialogporten>(_ => new RefitSettings
+    {
+        ContentSerializer = new SystemTextJsonContentSerializer(new JsonSerializerOptions
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        })
+    })
+    .ConfigureHttpClient(configuration =>
+    {
+        configuration.BaseAddress = new Uri(builder.Configuration["Dialogporten:BaseUrl"]!);
+    })
+    .AddHttpMessageHandler<ConsoleLoggingMessageHandler>()
+    .ConfigurePrimaryHttpMessageHandler<TokenGeneratorMessageHandler>();
 
 var app = builder.Build();
 
