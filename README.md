@@ -82,5 +82,9 @@ Example:
 GET {baseUrl}/fce
 ```
 
+### Current limitations
+- Only works in the test (not staging) environment.
+- Assumes that the service owner for the dialog is Digdir.
+
 ### License
 MIT

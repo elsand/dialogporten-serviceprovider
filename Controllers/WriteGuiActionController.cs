@@ -222,7 +222,7 @@ public class WriteGuiActionController : Controller
         return Guid.Parse(dialogId);
     }
 
-    public string GetActorId()
+    private string GetActorId()
     {
         var actorId = User.Claims.FirstOrDefault(c => c.Type == "c")?.Value;
         if (actorId is null)
