@@ -37,7 +37,14 @@ builder.Services
     {
         ContentSerializer = new SystemTextJsonContentSerializer(new JsonSerializerOptions
         {
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+
+            PropertyNameCaseInsensitive = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            Converters = {
+                new ObjectToInferredTypesConverter(),
+                new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)
+            }
         })
     })
     .ConfigureHttpClient(configuration =>

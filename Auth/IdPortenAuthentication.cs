@@ -47,7 +47,7 @@ public static class IdPortenAuthentication
             {
               OnRedirectToIdentityProviderForSignOut = context =>
               {
-                  context.Response.Redirect(configuration["Idporten:RedirectOnSignOut"]);
+                  context.Response.Redirect(configuration["Idporten:RedirectOnSignOut"]!);
                   context.HandleResponse();
 
                   return Task.CompletedTask;

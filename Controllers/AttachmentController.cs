@@ -23,7 +23,6 @@ namespace Digdir.BDB.Dialogporten.ServiceProvider.Controllers
 
             string? filePath;
             string? contentType;
-            string? contentDisposition;
 
             switch (fileExtension)
             {

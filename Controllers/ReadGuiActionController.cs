@@ -6,17 +6,17 @@ namespace Digdir.BDB.Dialogporten.ServiceProvider.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("guiaction/read/{xacmlaction?}")]
+[Route("guiaction/read")]
 public class ReadGuiActionController : ControllerBase
 {
     [HttpGet]
     public IActionResult Get(string? xacmlaction)
     {
-        var htmlContent = RenderPage(xacmlaction);
+        var htmlContent = RenderPage();
         return Content(htmlContent, "text/html", Encoding.UTF8);
     }
 
-    private string RenderPage(string? xacmlaction)
+    private string RenderPage()
     {
         var page =
             """
@@ -28,12 +28,10 @@ public class ReadGuiActionController : ControllerBase
             
             <p>Logged in user: {0}</p>
             
-            <p>Provided XACML action: {1}</p>
-            
             </html>
             """;
 
-        return string.Format(page, GetPid(), xacmlaction ?? "(none)");
+        return string.Format(page, GetPid());
     }
 
     private string GetPid()

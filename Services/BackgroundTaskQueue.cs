@@ -8,8 +8,8 @@ public interface IBackgroundTaskQueue
 
 public class BackgroundTaskQueue : IBackgroundTaskQueue
 {
-    private readonly Queue<Func<CancellationToken, Task>> _workItems = new Queue<Func<CancellationToken, Task>>();
-    private readonly SemaphoreSlim _signal = new SemaphoreSlim(0);
+    private readonly Queue<Func<CancellationToken, Task>> _workItems = new();
+    private readonly SemaphoreSlim _signal = new(0);
 
     public void QueueBackgroundWorkItem(Func<CancellationToken, Task> workItem)
     {

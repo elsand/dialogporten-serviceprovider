@@ -19,9 +19,9 @@ public class QueuedHostedService : BackgroundService
             {
                 await workItem(stoppingToken);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // Handle task exceptions here
+                // Just ignore task exceptions
             }
         }
     }

@@ -26,178 +26,187 @@ public class WriteGuiActionController : Controller
     [HttpPost]
     public async Task<IActionResult> Post(
         [FromQuery]string xacmlaction = "write",
-        [FromQuery]bool isDelayed = false,
+        [FromQuery]bool queueInBackground = false,
         [FromQuery]bool addActivity = false,
         [FromQuery]bool addTransmission = false,
         [FromQuery]bool addAttachment = false,
-        [FromQuery]DialogStatus_Values? setStatusTo = null,
-        [FromQuery]bool? setDialogGuiActionsToDeleteOnly = false)
+        [FromQuery]bool setDialogGuiActionsToDeleteOnly = false,
+        [FromQuery]DialogStatus_Values? setStatusTo = null)
     {
-        if (!HasPermission(xacmlaction))
+        if (!IsAuthorized(xacmlaction))
         {
             return Forbid();
         }
 
-        var dialogId = GetDialogId();
         var operations = new List<Operation>();
 
         if (addActivity)
         {
-            operations.Add(new Operation
-            {
-                Op = "add",
-                Path = "/activities/-",
-                Value = new CreateDialogDialogActivityDto
-                {
-                    Type = DialogActivityType_Values.Information,
-                    PerformedBy = new CreateDialogDialogActivityPerformedByActorDto
-                    {
-                        ActorType = ActorType_Values.PartyRepresentative,
-                        ActorId = GetActorId()
-                    },
-                    Description = new List<LocalizationDto>
-                    {
-                        new () { LanguageCode = "en", Value = "Activity added by dialogporten-serviceprovider"}}
-                    }
-                }
-            );
+            operations.Add(GetAddActivityOp());
         }
 
         if (addTransmission)
         {
-            operations.Add(new Operation
-            {
-                Op = "add",
-                Path = "/transmissions/-",
-                Value = new CreateDialogDialogTransmissionDto
-                {
-                    Type = DialogTransmissionType_Values.Information,
-                    Sender = new CreateDialogDialogTransmissionSenderActorDto
-                    {
-                        ActorType = ActorType_Values.PartyRepresentative,
-                        ActorId = GetActorId()
-                    },
-                    Content = new CreateDialogDialogTransmissionContentDto
-                    {
-                        Title = new ContentValueDto
-                        {
-                            MediaType = "text/plain", Value = new List<LocalizationDto>
-                            {
-                                new()
-                                {
-                                    LanguageCode = "en", Value = "Transmission title added by dialogporten-serviceprovider"
-                                }
-                            }
-                        },
-                        Summary = new ContentValueDto
-                        {
-                            MediaType = "text/plain", Value = new List<LocalizationDto>
-                            {
-                                new()
-                                {
-                                    LanguageCode = "en", Value = "Transmission summary added by dialogporten-serviceprovider"
-                                }
-                            }
-                        },
-                    }
-                }
-            });
+            operations.Add(GetAddTransmissionOp());
         }
 
         if (addAttachment)
         {
-
+            operations.Add(GetAddAttachmentOp());
         }
 
         if (setStatusTo.HasValue)
         {
-            operations.Add(new Operation
-            {
-                Op = "replace",
-                Path = "/status",
-                Value = setStatusTo.Value
-            });
+            operations.Add(GetReplaceStatusOp(setStatusTo.Value));
         }
 
-        if (isDelayed)
+        if (setDialogGuiActionsToDeleteOnly)
         {
-            _taskQueue.QueueBackgroundWorkItem(async token =>
-            {
-                await Task.Delay(1000, token);
-                var result = await _dialogporten.Patch(dialogId, operations, null, token);
-                if (!result.IsSuccessStatusCode)
-                {
-                    Console.WriteLine(result.Error.Content);
-                }
-            });
-
-            return StatusCode(202);
+            operations.Add(GetReplaceGuiActionsOp());
         }
 
-        await _dialogporten.Patch(dialogId, operations, null, CancellationToken.None);
-        return Created();
+        return await PerformMaybeBackgroundOperation(queueInBackground, () =>
+            _dialogporten.Patch(GetDialogId(), operations, null, CancellationToken.None));
 
-
-        /*
-        var paginatedList = await _dialogporten.GetDialogListSO(
-            serviceResource: null!,
-            party: null!,
-            endUserId: null!,
-            extendedStatus: null!,
-            externalReference: null!,
-            status: null!,
-            createdAfter: null!,
-            createdBefore: null!,
-            updatedAfter: null!,
-            updatedBefore: null!,
-            dueAfter: null!,
-            dueBefore: null!,
-            visibleAfter: null!,
-            visibleBefore: null!,
-            process: null!,
-            search: null!,
-            searchLanguageCode: null!,
-            orderBy: null!,
-            continuationToken: null!,
-            limit: null!,
-            cancellationToken: CancellationToken.None
-        );
-
-        return Ok(paginatedList);
-        */
     }
 
     [HttpDelete]
     public async Task<IActionResult> Delete(
         [FromQuery]string xacmlaction = "write",
-        [FromQuery]bool isDelayed = false)
+        [FromQuery]bool queueInBackground = false)
     {
 
-        if (!HasPermission(xacmlaction))
+        if (!IsAuthorized(xacmlaction))
         {
             return Forbid();
         }
 
-        var dialogId = GetDialogId();
-
-        if (isDelayed)
-        {
-            // Start a background task to delete the dialog after 1 second
-            _taskQueue.QueueBackgroundWorkItem(async token =>
-            {
-                await Task.Delay(1000, token);
-                await _dialogporten.DeleteDialog(dialogId, null, token);
-            });
-
-            return StatusCode(202);
-        }
-
-        // Delete the dialog immediately
-        await _dialogporten.DeleteDialog(dialogId, null, CancellationToken.None);
-        return NoContent();
+        return await PerformMaybeBackgroundOperation(queueInBackground, () =>
+            _dialogporten.DeleteDialog(GetDialogId(), null, CancellationToken.None));
     }
 
-    private bool HasPermission(string xacmlaction)
+    private Operation GetReplaceGuiActionsOp()
+    {
+        return new Operation
+        {
+            Op = "replace",
+            Path = "/guiActions",
+            Value = new List<UpdateDialogDialogGuiActionDto>
+            {
+                new()
+                {
+                    Action = "write",
+                    IsDeleteDialogAction = true,
+                    HttpMethod = HttpVerb_Values.DELETE,
+                    Title = new List<LocalizationDto> { new() { LanguageCode = "en", Value = "Delete dialog" } },
+                    Url = GetActionUrl(typeof(WriteGuiActionController), nameof(Delete))
+                }
+            }
+        };
+    }
+
+    private static Operation GetReplaceStatusOp(DialogStatus_Values setStatusTo)
+    {
+        return new Operation
+        {
+            Op = "replace",
+            Path = "/status",
+            Value = setStatusTo
+        };
+    }
+
+    private Operation GetAddAttachmentOp()
+    {
+        return new Operation
+        {
+            Op = "add",
+            Path = "/attachments/-",
+            Value = new UpdateDialogDialogAttachmentDto
+            {
+                DisplayName = new List<LocalizationDto>
+                {
+                    new()
+                    {
+                        LanguageCode = "en", Value = "Attachment added by dialogporten-serviceprovider"
+                    }
+                },
+                Urls = new List<UpdateDialogDialogAttachmentUrlDto>
+                {
+                    new ()
+                    {
+                        ConsumerType = AttachmentUrlConsumerType_Values.Gui,
+                        MediaType = "application/pdf",
+                        Url = GetActionUrl(typeof(AttachmentController), nameof(AttachmentController.Get), new { fileName = "document.pdf" })
+                    }
+                }
+            }
+        };
+    }
+
+    private Operation GetAddTransmissionOp()
+    {
+        return new Operation
+        {
+            Op = "add",
+            Path = "/transmissions/-",
+            Value = new UpdateDialogDialogTransmissionDto
+            {
+                Type = DialogTransmissionType_Values.Information,
+                Sender = new UpdateDialogDialogTransmissionSenderActorDto
+                {
+                    ActorType = ActorType_Values.PartyRepresentative,
+                    ActorId = GetActorId()
+                },
+                Content = new UpdateDialogDialogTransmissionContentDto
+                {
+                    Title = new ContentValueDto
+                    {
+                        MediaType = "text/plain", Value = new List<LocalizationDto>
+                        {
+                            new()
+                            {
+                                LanguageCode = "en", Value = "Transmission title added by dialogporten-serviceprovider"
+                            }
+                        }
+                    },
+                    Summary = new ContentValueDto
+                    {
+                        MediaType = "text/plain", Value = new List<LocalizationDto>
+                        {
+                            new()
+                            {
+                                LanguageCode = "en", Value = "Transmission summary added by dialogporten-serviceprovider"
+                            }
+                        }
+                    },
+                }
+            }
+        };
+    }
+
+    private Operation GetAddActivityOp()
+    {
+        return new Operation
+        {
+            Op = "add",
+            Path = "/activities/-",
+            Value = new UpdateDialogDialogActivityDto
+            {
+                Type = DialogActivityType_Values.Information,
+                PerformedBy = new UpdateDialogDialogActivityPerformedByActorDto
+                {
+                    ActorType = ActorType_Values.PartyRepresentative,
+                    ActorId = GetActorId()
+                },
+                Description = new List<LocalizationDto>
+                {
+                    new() { LanguageCode = "en", Value = "Activity added by dialogporten-serviceprovider" }
+                }
+            }
+        };
+    }
+
+    private bool IsAuthorized(string xacmlaction)
     {
         return User.Claims.Any(c => c.Type == "a" && c.Value.Split(';').Any(x => x == xacmlaction));
     }
@@ -222,5 +231,35 @@ public class WriteGuiActionController : Controller
         }
 
         return actorId;
+    }
+
+    private async Task<IActionResult> PerformMaybeBackgroundOperation(bool isDelayed, Func<Task> operation)
+    {
+        if (isDelayed)
+        {
+            _taskQueue.QueueBackgroundWorkItem(async token =>
+            {
+                await Task.Delay(1000, token);
+                await operation();
+            });
+
+            return StatusCode(202);
+        }
+
+        await operation();
+        return NoContent();
+    }
+
+    private Uri GetActionUrl(Type controllerType, string actionName, object? parameters = null)
+    {
+        var actionUrl = Url.Action(
+            action: actionName,
+            controller: controllerType.Name.Replace("Controller", ""),
+            values: parameters,
+            protocol: Request.Scheme,
+            host: Request.Host.ToString()
+        );
+
+        return new Uri(actionUrl!);
     }
 }
