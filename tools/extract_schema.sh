@@ -56,7 +56,18 @@ openapi2jsonschema --clean --output "$FINAL_SCHEMA_DIR" --input "$BUNDLED_OPENAP
 echo "Converted JSON Schema files saved to $FINAL_SCHEMA_DIR."
 
 # Step 5: Find the specific schema file for the specified component
-find . -name "*$TARGET_FILE" -exec mv {} $FINAL_SCHEMA_FILE.tmp \;
+find . -name "*$TARGET_FILE" -exec mv {} $FINAL_SCHEMA_FILE \;
+
+# Step 6: Remove superfluous oneOfs
+jq 'walk(if type == "object" and .oneOf then
+        if (.oneOf | length) == 1 then
+            .oneOf[0]
+        else
+            .
+        end
+    else
+        .
+    end)' $FINAL_SCHEMA_FILE > $FINAL_SCHEMA_FILE.tmp
 
 echo "Schema '$SCHEMA_NAME' extracted and saved to $FINAL_SCHEMA_FILE."
 
