@@ -54,7 +54,7 @@ Use this endpoint to perform a soft deletion of the dialog to test deletion hand
 
 Example:
 ```
-DELETE {baseUrl}/guiaction/delete?queueInBackground=true
+DELETE {baseUrl}/guiaction/write?queueInBackground=true
 ```
 
 ### Attachments
